@@ -20,7 +20,7 @@
 set -e
 
 pangolin_dir="/opt/pangolin"
-pangolin_device=${pangolin_device}
+pangolin_device="${pangolin_device}"
 
 pangolin_docker_compose_path="$pangolin_dir/docker-compose.yml"
 pangolin_docker_compose_systemd_unit_path="/etc/systemd/system/pangolin.service"
