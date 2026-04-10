@@ -20,7 +20,7 @@
 set -e
 
 pangolin_dir="/opt/pangolin"
-pangolin_device="/dev/nvme1n1"
+pangolin_device=${pangolin_device}
 
 pangolin_docker_compose_path="$pangolin_dir/docker-compose.yml"
 pangolin_docker_compose_systemd_unit_path="/etc/systemd/system/pangolin.service"
@@ -28,40 +28,55 @@ pangolin_docker_compose_systemd_unit_path="/etc/systemd/system/pangolin.service"
 pangolin_config_dir="$pangolin_dir/config"
 pangolin_config_path="$pangolin_config_dir/config.yml"
 
-traefik_config_dir="$pangolin_dir/traefik"
+traefik_config_dir="$pangolin_config_dir/traefik"
 traefik_static_config_path="$traefik_config_dir/traefik_config.yml"
 traefik_dynamic_config_path="$traefik_config_dir/dynamic_config.yml"
 
 filesystem=$(file -s $pangolin_device)
-pangolin_domain=$(ec2metadata --public-hostname)
+pangolin_public_ip=$(ec2metadata --public-ipv4)
+pangolin_base_domain="$pangolin_public_ip.sslip.io"
+pangolin_domain="pangolin.$pangolin_base_domain"
 
-#pangolin_server_secret=${pangolin_server_secret}
-#owner_email=${owner_email}
-
-pangolin_server_secret="just4now"
-owner_email="andrea.mazzotti@suse.com"
+pangolin_server_secret=${pangolin_server_secret}
+owner_email=${owner_email}
 
 if [ "$filesystem" == "$pangolin_device: data" ]; then
     echo "Initializing device $pangolin_device for the first time"
-    /usr/sbin/mkfs.xfs $pangolin_device
+    /usr/sbin/mkfs.ext4 $pangolin_device
 fi
 
 echo "Mounting $pangolin_device to $pangolin_dir"
 mkdir -p $pangolin_dir
-echo "$pangolin_device  $pangolin_dir  xfs     noatime  0 0" >> /etc/fstab # Adding entry to fstab to ensure mounting in case of instance reboot
+echo "$pangolin_device  $pangolin_dir  ext4     noatime  0 0" >> /etc/fstab # Adding entry to fstab to ensure mounting in case of instance reboot
 mount -a
 
 echo "Installing docker"
-zypper refresh
-zypper --non-interactive install docker-compose
+# Add Docker's official GPG key:
+apt update
+apt install ca-certificates curl
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+
+# Add the repository to Apt sources:
+tee /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: $(. /etc/os-release && echo "$VERSION_CODENAME")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+apt update
+apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
 
 echo "Configuring pangolin using domain $pangolin_domain" # Reference: https://docs.pangolin.net/self-host/manual/docker-compose
 mkdir -p $pangolin_config_dir
 mkdir -p $traefik_config_dir
 
-if [ ! -f $pangolin_docker_compose_path ]; then
-    echo "Creating initial configuration: $pangolin_docker_compose_path"
-    cat << EOF > $pangolin_docker_compose_path
+
+echo "Creating configuration: $pangolin_docker_compose_path"
+cat << EOF > $pangolin_docker_compose_path
 name: pangolin
 services:
   pangolin:
@@ -96,6 +111,7 @@ services:
       - 51820:51820/udp
       - 21820:21820/udp
       - 443:443
+      - 443:443/udp # For http3 QUIC if desired
       - 80:80
 
   traefik:
@@ -119,48 +135,39 @@ networks:
   default:
     driver: bridge
     name: pangolin
-    #enable_ipv6: true # activate if your system supports IPv6
+    enable_ipv6: false
 EOF
-fi
 
-if [ ! -f $pangolin_config_path ]; then
-    echo "Creating initial configuration: $pangolin_config_path"
-    cat << EOF > $pangolin_config_path
+echo "Creating configuration: $pangolin_config_path"
+cat << EOF > $pangolin_config_path
 # To see all available options, please visit the docs:
 # https://docs.pangolin.net/
 
 gerbil:
     start_port: 51820
-    base_endpoint: $pangolin_domain" # REPLACE WITH YOUR DOMAIN
+    base_endpoint: "$pangolin_domain"
     # Optional network settings (defaults shown):
     # subnet_group: "100.89.137.0/20"
     # block_size: 24
     # site_block_size: 30
 
 app:
-    dashboard_url: "https:/$pangolin_domain" # REPLACE WITH YOUR DOMAIN
+    dashboard_url: "https://$pangolin_domain"
     log_level: "info"
     telemetry:
         anonymous_usage: true
 
 domains:
     domain1:
-        base_domain: "$pangolin_domain" # REPLACE WITH YOUR DOMAIN
-        cert_resolver: "letsencrypt"
+        base_domain: "$pangolin_base_domain"
 
 server:
     secret: "$pangolin_server_secret"
     cors:
-        origins: ["https:/$pangolin_domain"] # REPLACE WITH YOUR DOMAIN
+        origins: ["https://$pangolin_domain"]
         methods: ["GET", "POST", "PUT", "DELETE", "PATCH"]
         allowed_headers: ["X-CSRF-Token", "Content-Type"]
         credentials: false
-
-# Optional organization network settings (defaults shown):
-# orgs:
-#     block_size: 24
-#     subnet_group: "100.90.128.0/20"
-#     utility_subnet_group: "100.96.128.0/20"
 
 flags:
     require_email_verification: false
@@ -168,11 +175,9 @@ flags:
     disable_user_create_org: false
     allow_raw_resources: true
 EOF
-fi
 
-if [ ! -f $traefik_static_config_path ]; then
-    echo "Creating initial configuration: $traefik_static_config_path"
-    cat << EOF > $traefik_static_config_path
+echo "Creating configuration: $traefik_static_config_path"
+cat << EOF > $traefik_static_config_path
 api:
   insecure: true
   dashboard: true
@@ -188,7 +193,7 @@ experimental:
   plugins:
     badger:
       moduleName: "github.com/fosrl/badger"
-      version: "v1.3.1"
+      version: "v1.4.0"
 
 log:
   level: "INFO"
@@ -215,6 +220,8 @@ entryPoints:
     transport:
       respondingTimeouts:
         readTimeout: "30m"
+    http3:
+      advertisedPort: 443
     http:
       tls:
         certResolver: "letsencrypt"
@@ -228,11 +235,9 @@ serversTransport:
 ping:
   entryPoint: "web"
 EOF
-fi
 
-if [ ! -f $traefik_dynamic_config_path ]; then
-    echo "Creating initial configuration: $traefik_dynamic_config_path"
-    cat << EOF > $traefik_dynamic_config_path
+echo "Creating configuration: $traefik_dynamic_config_path"
+cat << EOF > $traefik_dynamic_config_path
 http:
   middlewares:
     badger:
@@ -246,7 +251,7 @@ http:
   routers:
     # HTTP to HTTPS redirect router
     main-app-router-redirect:
-      rule: "Host($pangolin_domain\`)"
+      rule: "Host(\`$pangolin_domain\`)"
       service: next-service
       entryPoints:
         - web
@@ -256,7 +261,7 @@ http:
 
     # Next.js router (handles everything except API and WebSocket paths)
     next-router:
-      rule: "Host($pangolin_domain\`) && !PathPrefix(\`/api/v1\`)"
+      rule: "Host(\`$pangolin_domain\`) && !PathPrefix(\`/api/v1\`)"
       service: next-service
       entryPoints:
         - websecure
@@ -267,7 +272,7 @@ http:
 
     # API router (handles /api/v1 paths)
     api-router:
-      rule: "Host($pangolin_domain\`) && PathPrefix(\`/api/v1\`)"
+      rule: "Host(\`$pangolin_domain\`) && PathPrefix(\`/api/v1\`)"
       service: api-service
       entryPoints:
         - websecure
@@ -278,7 +283,7 @@ http:
 
     # WebSocket router
     ws-router:
-      rule: "Host($pangolin_domain\`)"
+      rule: "Host(\`$pangolin_domain\`)"
       service: api-service
       entryPoints:
         - websecure
@@ -307,7 +312,6 @@ tcp:
       proxyProtocol:
         version: 2
 EOF
-fi
 
 echo "Starting and enabling docker"
 systemctl enable docker
@@ -321,8 +325,8 @@ Description=Pangolin Service
 Type=oneshot
 RemainAfterExit=true
 WorkingDirectory=$pangolin_dir
-ExecStart=/usr/local/bin/docker-compose up -d --remove-orphans
-ExecStop=/usr/local/bin/docker-compose down
+ExecStart=docker compose up -d --remove-orphans
+ExecStop=docker compose down
 
 [Install]
 WantedBy=multi-user.target
@@ -331,4 +335,4 @@ EOF
 echo "Starting pangolin"
 systemctl daemon-reload
 systemctl enable pangolin
-# systemctl start pangolin #TODO: selinux 
+systemctl start pangolin

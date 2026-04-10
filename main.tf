@@ -1,3 +1,20 @@
+# Copyright © 2026 SUSE LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This script dumps some etcd info.
+# Mainly this is used to detect and debug conflicts managing resources.
+
 provider "aws" {
   region = "eu-west-2"
 
@@ -9,48 +26,34 @@ provider "aws" {
   }
 }
 
-data "aws_ami" "suse" {
+data "aws_ami" "debian" {
   most_recent = true
 
   filter {
     name   = "name"
-    values = ["suse-sles-16-0-*-hvm-ssd-x86_64"]
+    values = ["debian-13-amd64*"]
   }
 
-  filter {
-    name   = "description"
-    values = ["SUSE Linux Enterprise Server 16.0 (HVM, 64-bit, SSD-Backed)"]
-  }
-
-  owners = ["013907871322"] # SUSE
+  owners = ["136693071363"] 
 }
 
 resource "aws_instance" "pangolin" {
-  ami           = data.aws_ami.suse.id
-  instance_type = "t3.small"
+  ami           = data.aws_ami.debian.id
+  instance_type = "t3.micro"
   availability_zone = "eu-west-2a"
   key_name = "amazzotti"
-  security_groups = [ "TestAllowAll" ] # TODO: create ad hoc SG
-  # user_data = templatefile("${path.module}/pangolin_init.sh",
-  # {
-  #   owner_email=var.owner_email
-  #   pangolin_server_secret=var.pangolin_server_secret
-  #   pangolin_device=var.pangolin_device
-  # })
+  security_groups = [ aws_security_group.allow_pangolin.name ]
+  user_data = templatefile("${path.module}/pangolin_init.sh",
+  {
+    owner_email="andrea.mazzotti@suse.com"
+    pangolin_server_secret="just4now"
+    pangolin_device="/dev/nvme1n1"
+  })
 }
 
 resource "aws_eip_association" "pangolin_ip_assoc" {
   instance_id   = aws_instance.pangolin.id
   allocation_id = aws_eip.pangolin.id
-}
-
-resource "aws_eip" "pangolin" {
-  domain = "vpc"
-}
-
-resource "aws_ebs_volume" "pangolin" { # TODO: create snapshot policy
-  availability_zone = "eu-west-2a"
-  size              = 1
 }
 
 resource "aws_volume_attachment" "pangolin_ebs_att" {
