@@ -12,9 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This script dumps some etcd info.
-# Mainly this is used to detect and debug conflicts managing resources.
-
 provider "aws" {
   region = "eu-west-2"
 
