@@ -1,0 +1,58 @@
+# Weekly Pangolin instance refresh.
+#
+# No .tfstate file is persisted. Each run starts from a clean slate:
+#   1. Import all existing AWS resources into a fresh local state.
+#   2. Destroy the EC2 instance (EBS volume and Elastic IP are preserved).
+#   3. Re-apply — a new instance boots with the current pangolin_init.sh,
+#      pulling the pinned image versions. Renovate keeps those versions up to date.
+#
+# Required repository secrets:
+#   AWS_ACCESS_KEY_ID, AWS_SECRET_ACCESS_KEY, TF_VAR_PANGOLIN_SERVER_SECRET
+#
+# Required repository variables:
+#   OWNER, OWNER_EMAIL, AWS_REGION (optional, defaults to eu-west-2)
+
+name: Weekly Pangolin refresh
+
+on:
+  schedule:
+    - cron: "0 3 * * 0" # Sundays at 03:00 UTC — after Saturday's EBS snapshot
+  workflow_dispatch:
+
+jobs:
+  refresh:
+    name: Refresh Pangolin instance
+    runs-on: ubuntu-latest
+
+    env:
+      TF_VAR_owner: ${{ vars.OWNER }}
+      TF_VAR_owner_email: ${{ vars.OWNER_EMAIL }}
+      TF_VAR_region: ${{ vars.AWS_REGION || 'eu-west-2' }}
+      TF_VAR_pangolin_server_secret: ${{ secrets.TF_VAR_PANGOLIN_SERVER_SECRET }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: opentofu/setup-opentofu@v1
+
+      - name: Configure AWS credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ vars.AWS_REGION || 'eu-west-2' }}
+
+      - name: Initialise OpenTofu
+        run: tofu init
+
+      - name: Import existing resources
+        run: OWNER=${{ vars.OWNER }} ./import_resources.sh
+
+      - name: Destroy EC2 instance
+        run: |
+          tofu destroy \
+            -target module.pangolin_server.aws_instance.pangolin \
+            -auto-approve
+
+      - name: Recreate instance with current configuration
+        run: tofu apply -auto-approve
