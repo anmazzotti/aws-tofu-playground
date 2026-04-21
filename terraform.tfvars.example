@@ -1,7 +1,8 @@
 # Copy this file to terraform.tfvars and fill in the values.
 # terraform.tfvars is gitignored and must never be committed.
 
-owner                  = "yourname"
+region = "eu-west-2"
+owner  = "yourname"
 owner_email            = "you@example.com"
 pangolin_server_secret = "REPLACE_WITH_A_STRONG_RANDOM_SECRET"
 

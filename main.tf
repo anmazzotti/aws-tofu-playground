@@ -13,7 +13,7 @@
 # limitations under the License.
 
 provider "aws" {
-  region = "eu-west-2"
+  region = var.region
 
   default_tags {
     tags = {
@@ -37,7 +37,7 @@ data "aws_ami" "debian" {
 resource "aws_instance" "pangolin" {
   ami           = data.aws_ami.debian.id
   instance_type     = "t3.micro"
-  availability_zone = "eu-west-2a"
+  availability_zone = "${var.region}a"
   key_name          = var.key_name != "" ? var.key_name : null
   security_groups   = [aws_security_group.allow_pangolin.name]
   user_data = templatefile("${path.module}/pangolin_init.sh",

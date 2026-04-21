@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+variable "region" {
+  description = "AWS region to deploy into (e.g. 'eu-west-2')."
+  type        = string
+  default     = "eu-west-2"
+}
+
 variable "owner" {
   description = "Your name. Used for resource tags and identification (e.g. 'alice')."
   type        = string
