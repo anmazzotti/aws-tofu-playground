@@ -37,7 +37,7 @@ This repository implements EDR 009: Pangolin as a Replacement for Ngrok.
   managed as a systemd service.
 - **Elastic IP** — stable public endpoint that survives instance stops and starts.
 - **EBS 1 GB** mounted at `/opt/pangolin` — persists Pangolin configuration and Let's Encrypt
-  certificates across reboots.
+  certificates across reboots and instance replacements.
 - **DLM snapshot policy** — weekly EBS snapshot every Saturday at 04:00 UTC, last 5 retained.
 - **Domain** — automatically derived from the Elastic IP using `sslip.io`
   (e.g. `pangolin.1-2-3-4.sslip.io`). No DNS delegation required.
@@ -68,14 +68,8 @@ tofu plan
 tofu apply
 ```
 
-After `apply` completes, note the Elastic IP from the AWS console (or `tofu output` if you add an
-output). The Pangolin dashboard will be available at:
-
-```
-https://pangolin.<elastic-ip>.sslip.io
-```
-
-Bootstrap takes ~3–5 minutes. You can follow the cloud-init progress via AWS SSM:
+After `apply` completes the Pangolin dashboard URL is printed by `tofu output`. Bootstrap takes
+~3–5 minutes. Follow the cloud-init progress via AWS SSM:
 
 ```sh
 aws ssm start-session --target <instance-id>
@@ -86,13 +80,38 @@ sudo tail -f /var/log/cloud-init-output.log
 
 | Variable | Description | Default |
 |---|---|---|
+| `region` | AWS region | `eu-west-2` |
 | `owner` | Your name — used for resource tags | **required** |
 | `owner_email` | Email for Let's Encrypt certificate notifications | **required** |
 | `pangolin_server_secret` | Pangolin server secret (sensitive) | **required** |
 | `key_name` | EC2 key pair name for SSH. Leave empty to disable SSH | `""` |
-| `ssh_allowed_cidrs` | CIDRs allowed for SSH. Leave empty for no public SSH (recommended) | `[]` |
+| `ssh_allowed_cidrs` | Your public IP as a `/32`. Leave empty for no SSH | `[]` |
+| `user_data_template` | Path to a custom bootstrap script template. Receives `owner_email`, `pangolin_server_secret`, `pangolin_device` | bundled `pangolin_init.sh` |
 
 > `terraform.tfvars` is gitignored. **Never commit real values.**
+
+## Using this as a module
+
+Other teams can consume the `pangolin-server` module directly from this repository:
+
+```hcl
+module "pangolin_server" {
+  source = "github.com/anmazzotti/aws-tofu-playground//modules/pangolin-server?ref=<tag>"
+
+  region                 = "us-east-1"
+  owner                  = "alice"
+  owner_email            = "alice@example.com"
+  pangolin_server_secret = var.pangolin_server_secret
+}
+
+output "pangolin_url" {
+  value = module.pangolin_server.pangolin_url
+}
+```
+
+To use a customised bootstrap script while reusing the rest of the infrastructure, pass a path
+to your own template via `user_data_template`. The template receives the same variables as the
+bundled `pangolin_init.sh`: `owner_email`, `pangolin_server_secret`, `pangolin_device`.
 
 ## Post-deployment: setting up Pangolin
 
@@ -169,14 +188,6 @@ This configuration uses `sslip.io` (IP-based wildcard DNS) for simplicity. EDR 0
 your domain and configure DNS A records for both the apex and `*.<domain>` pointing to the
 Elastic IP.
 
-## Importing pre-existing resources
-
-If an EC2 instance and Elastic IP already exist and you want to manage them with OpenTofu:
-
-```sh
-OWNER=yourname ./import_resources.sh
-```
-
 ## Maintenance
 
 ### Costs (eu-west-2, ~150 GB/month outbound)
@@ -193,14 +204,39 @@ OWNER=yourname ./import_resources.sh
 Stopping the instance during idle periods (nights, weekends) is the easiest way to reduce costs.
 The Elastic IP, EBS volume, and snapshots continue to accrue charges regardless.
 
-### Tasks
+### Weekly automated refresh
+
+A GitHub Action (`.github/workflows/weekly-refresh.yml`) runs every Sunday at 03:00 UTC — after
+Saturday's EBS snapshot. It refreshes the EC2 instance without maintaining any Terraform state:
+
+```
+1. Import all existing AWS resources into a fresh local state
+2. tofu destroy -target module.pangolin_server.aws_instance.pangolin
+3. tofu apply
+```
+
+The EBS volume and Elastic IP are **never destroyed**, so Pangolin configuration, Let's Encrypt
+certificates, and the dashboard URL all survive. The new instance boots with the current
+`pangolin_init.sh`, which pulls the pinned image versions. When Renovate merges a version bump
+PR, the next weekly run picks it up automatically.
+
+Configure the following in your GitHub repository before enabling the workflow:
+
+| Type | Name | Value |
+|---|---|---|
+| Secret | `AWS_ACCESS_KEY_ID` | AWS access key with EC2/IAM/DLM permissions |
+| Secret | `AWS_SECRET_ACCESS_KEY` | Corresponding secret key |
+| Secret | `TF_VAR_PANGOLIN_SERVER_SECRET` | Pangolin server secret |
+| Variable | `OWNER` | Your name (matches resource tags) |
+| Variable | `OWNER_EMAIL` | Email for Let's Encrypt |
+| Variable | `AWS_REGION` | AWS region (optional, defaults to `eu-west-2`) |
+
+### Other tasks
 
 | Task | How |
 |---|---|
 | Stop paying during idle periods | Stop the EC2 instance from the AWS console. The Elastic IP and EBS volume (and their charges) persist. Terminate the instance only if you are done entirely. |
 | Snapshots | EBS snapshot runs weekly (Saturdays, 04:00 UTC). Last 5 retained. Managed by DLM. |
-| Update images (running instance) | Connect via SSM or SSH, then: `cd /opt/pangolin && docker compose pull && systemctl restart pangolin` |
-| Update images (repo) | Renovate opens a PR when new versions of Pangolin, Gerbil, or Traefik are released. Merge it, then apply the update to the running instance as above. |
 | Destroy everything | `tofu destroy` |
 
 ## License
