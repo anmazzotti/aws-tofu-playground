@@ -142,20 +142,6 @@ helm install newt pangolin/newt \
 
 > See the Newt chart documentation for the exact secret key names.
 
-### 5. Install Rancher (example)
-
-Point Rancher's hostname at the Pangolin Resource subdomain you created:
-
-```sh
-helm install rancher rancher-latest/rancher \
-  --namespace cattle-system \
-  --create-namespace \
-  --set hostname=rancher.<elastic-ip>.sslip.io \
-  --set bootstrapPassword=<password> \
-  --version 2.13.0 \
-  --wait
-```
-
 ## Security
 
 The following controls are **mandatory** per EDR 009:
