@@ -114,7 +114,7 @@ cat << EOF > $pangolin_docker_compose_path
 name: pangolin
 services:
   pangolin:
-    image: docker.io/fosrl/pangolin:latest # https://github.com/fosrl/pangolin/releases
+    image: docker.io/fosrl/pangolin:1.17.1 # https://github.com/fosrl/pangolin/releases
     container_name: pangolin
     restart: unless-stopped
     volumes:
@@ -126,7 +126,7 @@ services:
       retries: 15
 
   gerbil:
-    image: docker.io/fosrl/gerbil:latest # https://github.com/fosrl/gerbil/releases
+    image: docker.io/fosrl/gerbil:1.3.1 # https://github.com/fosrl/gerbil/releases
     container_name: gerbil
     restart: unless-stopped
     depends_on:
@@ -149,7 +149,7 @@ services:
       - 80:80
 
   traefik:
-    image: docker.io/traefik:v3.6
+    image: docker.io/traefik:v3.6.13
     container_name: traefik
     restart: unless-stopped
 
