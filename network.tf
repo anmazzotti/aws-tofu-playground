@@ -60,8 +60,7 @@ resource "aws_security_group" "allow_pangolin" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  # SSH is disabled by default. Set ssh_allowed_cidrs to your VPN CIDR to enable it,
-  # or use AWS SSM Session Manager instead (recommended per EDR 009: no public SSH).
+  # SSH is disabled by default. To enable, set ssh_allowed_cidrs to your public IP as a /32.
   dynamic "ingress" {
     for_each = length(var.ssh_allowed_cidrs) > 0 ? [1] : []
     content {

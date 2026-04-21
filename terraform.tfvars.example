@@ -5,9 +5,8 @@ owner                  = "yourname"
 owner_email            = "you@example.com"
 pangolin_server_secret = "REPLACE_WITH_A_STRONG_RANDOM_SECRET"
 
-# SSH access — leave both empty to disable public SSH and use AWS SSM Session Manager instead.
-# If SSH is needed, set key_name to an existing EC2 key pair and restrict ssh_allowed_cidrs
-# to your VPN CIDR (never 0.0.0.0/0 — see EDR 009 security requirements).
+# SSH access — set to your public IP as a /32 CIDR to allow SSH, or leave empty to disable it.
+# Key-based auth only; passwords are always disabled by pangolin_init.sh regardless.
 key_name          = ""
 ssh_allowed_cidrs = []
-# ssh_allowed_cidrs = ["10.0.0.0/8"]  # example: engineering VPN CIDR
+# ssh_allowed_cidrs = ["YOUR_PUBLIC_IP/32"]

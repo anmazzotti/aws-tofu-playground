@@ -3,7 +3,7 @@
 OpenTofu configuration to deploy a self-hosted [Pangolin](https://github.com/fosrl/pangolin)
 tunnelling server on AWS, replacing Ngrok for local Rancher development environments.
 
-This repository implements [EDR 009: Pangolin as a Replacement for Ngrok](https://github.com/suse/engineering-decision-records).
+This repository implements EDR 009: Pangolin as a Replacement for Ngrok.
 
 ## Architecture
 
@@ -49,8 +49,7 @@ This repository implements [EDR 009: Pangolin as a Replacement for Ngrok](https:
 - AWS credentials with the following permissions: EC2 (instances, EIPs, security groups, EBS,
   DLM), IAM (role + policy creation for DLM).
 - An [EC2 key pair](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html) in
-  `eu-west-2` — **only needed if you enable SSH access**. AWS SSM Session Manager is the
-  recommended alternative (see [Security](#security)).
+  `eu-west-2` — **not needed**. Use [AWS SSM Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html) to access the instance instead.
 
 ## Quickstart
 
@@ -159,11 +158,11 @@ helm install rancher rancher-latest/rancher \
 
 ## Security
 
-The following controls are **mandatory** per [EDR 009](https://github.com/suse/engineering-decision-records):
+The following controls are **mandatory** per EDR 009:
 
 | Control | Status in this repo |
 |---|---|
-| No public SSH | ✅ SSH disabled by default (`ssh_allowed_cidrs = []`). If SSH is needed, restrict to VPN CIDR. |
+| No public SSH | ✅ SSH disabled by default (`ssh_allowed_cidrs = []`). To enable, set to your public IP as a `/32`. Key-based auth only — passwords always disabled (EDR 009). |
 | Cluster-internal targets only (`*.svc.cluster.local`) | ✅ Enforced by team policy; admission webhook recommended where feasible |
 | Pangolin authentication always enabled | ✅ `disable_signup_without_invite: true` in `pangolin_init.sh` |
 | Site credentials as Kubernetes Secrets | ✅ Documented above; never commit plaintext values |

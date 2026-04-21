@@ -35,7 +35,7 @@ variable "key_name" {
 }
 
 variable "ssh_allowed_cidrs" {
-  description = "CIDR blocks allowed for SSH access. Leave empty to disable public SSH entirely and use AWS SSM Session Manager instead (mandatory per EDR 009: no public SSH)."
+  description = "Your public IP as a /32 CIDR (e.g. \"1.2.3.4/32\"). SSH access is restricted to this address only. Leave empty to disable SSH entirely."
   type        = list(string)
   default     = []
 }
