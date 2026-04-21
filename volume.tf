@@ -13,7 +13,7 @@
 # limitations under the License.
 
 resource "aws_ebs_volume" "pangolin" {
-  availability_zone = "${var.region}a"
+  availability_zone = local.availability_zone
   size              = 1
 
   tags = {
