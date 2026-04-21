@@ -12,9 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This script dumps some etcd info.
-# Mainly this is used to detect and debug conflicts managing resources.
-
 resource "aws_eip" "pangolin" {
   domain = "vpc"
 }
@@ -63,12 +60,17 @@ resource "aws_security_group" "allow_pangolin" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  ingress {
-    description = "Allow all SSH"
-    from_port   = 22
-    to_port     = 22
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+  # SSH is disabled by default. Set ssh_allowed_cidrs to your VPN CIDR to enable it,
+  # or use AWS SSM Session Manager instead (recommended per EDR 009: no public SSH).
+  dynamic "ingress" {
+    for_each = length(var.ssh_allowed_cidrs) > 0 ? [1] : []
+    content {
+      description = "SSH access (restricted to allowed CIDRs)"
+      from_port   = 22
+      to_port     = 22
+      protocol    = "tcp"
+      cidr_blocks = var.ssh_allowed_cidrs
+    }
   }
 
   egress {
