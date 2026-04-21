@@ -179,11 +179,28 @@ OWNER=yourname ./import_resources.sh
 
 ## Maintenance
 
+### Costs (eu-west-2, ~150 GB/month outbound)
+
+| Resource | Running | Stopped |
+|---|---|---|
+| EC2 t3.micro | ~$8.50/month | $0 |
+| Elastic IP | free (attached) | ~$3.65/month |
+| EBS 1 GB | ~$0.10/month | ~$0.10/month |
+| EBS snapshots (5 × incremental) | ~$0.25/month | ~$0.25/month |
+| Data out (~150 GB) | ~$13.50/month | $0 |
+| **Total** | **~$22–24/month** | **~$4/month** |
+
+Stopping the instance during idle periods (nights, weekends) is the easiest way to reduce costs.
+The Elastic IP, EBS volume, and snapshots continue to accrue charges regardless.
+
+### Tasks
+
 | Task | How |
 |---|---|
 | Stop paying during idle periods | Stop the EC2 instance from the AWS console. The Elastic IP and EBS volume (and their charges) persist. Terminate the instance only if you are done entirely. |
 | Snapshots | EBS snapshot runs weekly (Saturdays, 04:00 UTC). Last 5 retained. Managed by DLM. |
-| Update Pangolin | Update the image tag in `pangolin_init.sh` and re-run `tofu apply` to reprovision, or pull new images manually on the instance. |
+| Update images (running instance) | Connect via SSM or SSH, then: `cd /opt/pangolin && docker compose pull && systemctl restart pangolin` |
+| Update images (repo) | Renovate opens a PR when new versions of Pangolin, Gerbil, or Traefik are released. Merge it, then apply the update to the running instance as above. |
 | Destroy everything | `tofu destroy` |
 
 ## License
