@@ -80,6 +80,15 @@ Unattended-Upgrade::Automatic-Reboot-Time "04:30";
 APTEOF
 
 systemctl enable --now unattended-upgrades
+
+echo "Hardening SSH: key-only authentication, no passwords"
+cat << 'SSHEOF' > /etc/ssh/sshd_config.d/99-hardening.conf
+PasswordAuthentication no
+KbdInteractiveAuthentication no
+PermitRootLogin no
+SSHEOF
+systemctl restart ssh
+
 curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
 chmod a+r /etc/apt/keyrings/docker.asc
 
