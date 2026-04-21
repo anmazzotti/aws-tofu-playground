@@ -17,8 +17,8 @@ provider "aws" {
 
   default_tags {
     tags = {
-      owner = "andrea"
-      Name = "andrea_pangolin"
+      owner = var.owner
+      Name  = "${var.owner}_pangolin"
     }
   }
 }
@@ -36,16 +36,17 @@ data "aws_ami" "debian" {
 
 resource "aws_instance" "pangolin" {
   ami           = data.aws_ami.debian.id
-  instance_type = "t3.micro"
+  instance_type     = "t3.micro"
   availability_zone = "eu-west-2a"
-  key_name = "amazzotti"
-  security_groups = [ aws_security_group.allow_pangolin.name ]
+  key_name          = var.key_name != "" ? var.key_name : null
+  security_groups   = [aws_security_group.allow_pangolin.name]
   user_data = templatefile("${path.module}/pangolin_init.sh",
-  {
-    owner_email="andrea.mazzotti@suse.com"
-    pangolin_server_secret="just4now"
-    pangolin_device="/dev/nvme1n1"
-  })
+    {
+      owner_email            = var.owner_email
+      pangolin_server_secret = var.pangolin_server_secret
+      pangolin_device        = "/dev/nvme1n1"
+    }
+  )
 }
 
 resource "aws_eip_association" "pangolin_ip_assoc" {
