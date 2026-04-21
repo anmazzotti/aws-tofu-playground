@@ -14,8 +14,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This script dumps some etcd info.
-# Mainly this is used to detect and debug conflicts managing resources.
+# Cloud-init bootstrap script: installs Docker and configures Pangolin (+ Gerbil + Traefik)
+# on first boot. Rendered by OpenTofu as a templatefile — variables are substituted at
+# plan/apply time and must not be committed with real values.
  
 set -e
 
@@ -53,8 +54,32 @@ mount -a
 echo "Installing docker"
 # Add Docker's official GPG key:
 apt update
-apt install ca-certificates curl
+apt install -y ca-certificates curl unattended-upgrades
 install -m 0755 -d /etc/apt/keyrings
+
+echo "Enabling automatic security updates"
+# Run unattended-upgrades daily and clean the package cache weekly.
+cat << 'APTEOF' > /etc/apt/apt.conf.d/20auto-upgrades
+APT::Periodic::Update-Package-Lists "1";
+APT::Periodic::Unattended-Upgrade "1";
+APT::Periodic::AutocleanInterval "7";
+APTEOF
+
+# Security-only upgrades. Reboot automatically at 04:30 when required (kernel/libc updates).
+# Note: $${distro_codename} is an apt variable — rendered as ${distro_codename} at runtime.
+cat << 'APTEOF' > /etc/apt/apt.conf.d/50unattended-upgrades
+Unattended-Upgrade::Origins-Pattern {
+    "origin=Debian,codename=$${distro_codename},label=Debian-Security";
+};
+Unattended-Upgrade::Package-Blacklist {};
+Unattended-Upgrade::AutoFixInterruptedDpkg "true";
+Unattended-Upgrade::MinimalSteps "true";
+Unattended-Upgrade::Remove-Unused-Dependencies "true";
+Unattended-Upgrade::Automatic-Reboot "true";
+Unattended-Upgrade::Automatic-Reboot-Time "04:30";
+APTEOF
+
+systemctl enable --now unattended-upgrades
 curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
 chmod a+r /etc/apt/keyrings/docker.asc
 
