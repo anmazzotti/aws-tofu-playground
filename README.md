@@ -49,7 +49,7 @@ This repository implements EDR 009: Pangolin as a Replacement for Ngrok.
 - AWS credentials with the following permissions: EC2 (instances, EIPs, security groups, EBS,
   DLM), IAM (role + policy creation for DLM).
 - An [EC2 key pair](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html) in
-  `eu-west-2` — **not needed**. Use [AWS SSM Session Manager](https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager.html) to access the instance instead.
+  `eu-west-2` — required if you enable SSH access (`key_name` + `ssh_allowed_cidrs`).
 
 ## Quickstart
 
