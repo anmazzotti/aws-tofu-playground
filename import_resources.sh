@@ -27,6 +27,6 @@ ip_association_id=$(aws ec2 describe-addresses --filters "Name=tag:owner,Values=
 
 echo "Found EC2 instance $instance_id associated to Elastic IP $elastic_ip_id"
 
-tofu import aws_instance.pangolin "$instance_id"
-tofu import aws_eip.pangolin "$elastic_ip_id"
-tofu import aws_eip_association.pangolin_ip_assoc "$ip_association_id"
+tofu import module.pangolin_server.aws_instance.pangolin "$instance_id"
+tofu import module.pangolin_server.aws_eip.pangolin "$elastic_ip_id"
+tofu import module.pangolin_server.aws_eip_association.pangolin_ip_assoc "$ip_association_id"

@@ -12,23 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-provider "aws" {
-  region = var.region
-
-  default_tags {
-    tags = {
-      owner = var.owner
-      Name  = "${var.owner}_pangolin"
-    }
-  }
+output "instance_id" {
+  description = "EC2 instance ID of the Pangolin server."
+  value       = aws_instance.pangolin.id
 }
 
-module "pangolin_server" {
-  source = "./modules/pangolin-server"
+output "elastic_ip" {
+  description = "Elastic IP address of the Pangolin server."
+  value       = aws_eip.pangolin.public_ip
+}
 
-  region                 = var.region
-  owner_email            = var.owner_email
-  pangolin_server_secret = var.pangolin_server_secret
-  key_name               = var.key_name
-  ssh_allowed_cidrs      = var.ssh_allowed_cidrs
+output "pangolin_url" {
+  description = "Pangolin dashboard URL."
+  value       = "https://pangolin.${aws_eip.pangolin.public_ip}.sslip.io"
 }
