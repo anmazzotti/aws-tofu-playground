@@ -1,0 +1,10 @@
+# Gitleaks configuration — false positive allowlist.
+# https://github.com/gitleaks/gitleaks?tab=readme-ov-file#configuration
+
+[allowlist]
+description = "Static header values that are not secrets"
+regexes = [
+  # Pangolin uses a static, well-known placeholder as its CSRF header value
+  # (not a real token). See: https://github.com/fosrl/pangolin
+  "x-csrf-protection",
+]

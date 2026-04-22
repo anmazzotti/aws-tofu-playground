@@ -21,6 +21,10 @@ locals {
   _domain_labels       = split(".", var.custom_domain)
   # Strip the first DNS label to get the parent zone: "pangolin.example.com" → "example.com"
   pangolin_base_domain = local.use_custom_domain ? join(".", slice(local._domain_labels, 1, length(local._domain_labels))) : ""
+
+  # Derive a deterministic 32-char alphanumeric setup token from the server secret.
+  # Format required by Pangolin: /^[a-z0-9]{32}$/ — SHA-256 hex satisfies this.
+  pangolin_setup_token = substr(sha256(var.pangolin_server_secret), 0, 32)
 }
 
 check "dns_config" {
@@ -51,6 +55,7 @@ resource "aws_instance" "pangolin" {
     {
       owner_email            = var.owner_email
       pangolin_server_secret = var.pangolin_server_secret
+      pangolin_setup_token   = local.pangolin_setup_token
       pangolin_device        = "/dev/nvme1n1"
       pangolin_custom_domain = var.custom_domain
     }

@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+output "setup_token" {
+  description = "One-time Pangolin setup token for creating the initial admin account."
+  value       = module.pangolin_server.pangolin_setup_token
+  sensitive   = true
+}
+
 output "pangolin_url" {
   description = "Pangolin dashboard URL."
   value       = module.pangolin_server.pangolin_url

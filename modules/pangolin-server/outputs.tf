@@ -12,6 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+output "pangolin_setup_token" {
+  description = "One-time setup token for creating the initial Pangolin admin account. Only valid before any admin is created."
+  value       = local.pangolin_setup_token
+  sensitive   = true
+}
+
 output "instance_id" {
   description = "EC2 instance ID of the Pangolin server."
   value       = aws_instance.pangolin.id

@@ -120,7 +120,9 @@ echo "  Waiting for Pangolin API to become healthy (up to 10 minutes)..."
 
 READY=false
 for i in $(seq 1 120); do
-  STATUS=$(curl -sk -o /dev/null -w "%{http_code}" "${PANGOLIN_URL}/api/v1/" 2>/dev/null || echo "000")
+  STATUS=$(curl -sk -o /dev/null -w "%{http_code}" "${PANGOLIN_URL}/api/v1/" 2>/dev/null; echo)
+  STATUS="${STATUS//[[:space:]]/}"
+  [ -z "$STATUS" ] && STATUS="000"
   if [ "$STATUS" = "200" ] || [ "$STATUS" = "404" ]; then
     READY=true
     ok "Pangolin API is up (attempt ${i})"
@@ -137,22 +139,36 @@ if [ "$READY" != "true" ]; then
   exit 0
 fi
 
-HTTP_STATUS=$(curl -sk \
-  -o /tmp/pangolin-signup.json \
-  -w "%{http_code}" \
-  -X POST "${PANGOLIN_URL}/api/v1/auth/signup" \
-  -H "Content-Type: application/json" \
-  -d "{\"email\": \"${PANGOLIN_ADMIN_EMAIL}\", \"password\": \"${PANGOLIN_ADMIN_PASSWORD}\", \"inviteCode\": \"\"}")
+# Check if initial setup is already complete
+SETUP_COMPLETE=$(curl -sk "${PANGOLIN_URL}/api/v1/auth/initial-setup-complete" \
+  -H "X-CSRF-Token: x-csrf-protection" | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('data',{}).get('complete','false'))" 2>/dev/null || echo "false")
 
-if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "201" ]; then
-  ok "Admin account created for ${PANGOLIN_ADMIN_EMAIL}"
+if [ "$SETUP_COMPLETE" = "True" ] || [ "$SETUP_COMPLETE" = "true" ]; then
+  ok "Pangolin already has an admin account. Skipping setup."
 else
-  warn "Signup returned HTTP ${HTTP_STATUS}. API response:"
-  cat /tmp/pangolin-signup.json 2>/dev/null && echo ""
-  warn "The account may already exist, or setup must be completed via the dashboard."
-fi
+  SETUP_TOKEN=$(tofu output -raw setup_token 2>/dev/null || echo "")
+  if [ -z "$SETUP_TOKEN" ]; then
+    warn "Could not retrieve setup token from tofu output."
+    warn "Complete admin setup manually at: ${PANGOLIN_URL}"
+  else
+    HTTP_STATUS=$(curl -sk \
+      -o /tmp/pangolin-signup.json \
+      -w "%{http_code}" \
+      -X PUT "${PANGOLIN_URL}/api/v1/auth/set-server-admin" \
+      -H "Content-Type: application/json" \
+      -H "X-CSRF-Token: x-csrf-protection" \
+      -d "{\"email\": \"${PANGOLIN_ADMIN_EMAIL}\", \"password\": \"${PANGOLIN_ADMIN_PASSWORD}\", \"setupToken\": \"${SETUP_TOKEN}\"}")
 
-rm -f /tmp/pangolin-signup.json
+    if [ "$HTTP_STATUS" = "200" ] || [ "$HTTP_STATUS" = "201" ]; then
+      ok "Admin account created for ${PANGOLIN_ADMIN_EMAIL}"
+    else
+      warn "Setup returned HTTP ${HTTP_STATUS}. API response:"
+      cat /tmp/pangolin-signup.json 2>/dev/null && echo ""
+      warn "Complete admin setup manually at: ${PANGOLIN_URL}"
+    fi
+    rm -f /tmp/pangolin-signup.json
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # Next steps
