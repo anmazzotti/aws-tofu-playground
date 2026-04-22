@@ -76,7 +76,8 @@ APT::Periodic::AutocleanInterval "7";
 APTEOF
 
 # Security-only upgrades. Reboot automatically at 04:30 when required (kernel/libc updates).
-# Note: $${distro_codename} is an apt variable — rendered as ${distro_codename} at runtime.
+# Note: $${distro_codename} below is an apt variable escaped for templatefile; it renders
+# as $${distro_codename} in the cloud-init script (i.e. apt resolves it at upgrade time).
 cat << 'APTEOF' > /etc/apt/apt.conf.d/50unattended-upgrades
 Unattended-Upgrade::Origins-Pattern {
     "origin=Debian,codename=$${distro_codename},label=Debian-Security";
