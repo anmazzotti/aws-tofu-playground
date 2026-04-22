@@ -27,6 +27,7 @@ module "pangolin_server" {
   source = "./modules/pangolin-server"
 
   region                 = var.region
+  owner                  = var.owner
   owner_email            = var.owner_email
   pangolin_server_secret = var.pangolin_server_secret
   key_name               = var.key_name

@@ -16,7 +16,7 @@ resource "aws_eip" "pangolin" {
 }
 
 resource "aws_security_group" "allow_pangolin" {
-  name        = "allow_pangolin"
+  name        = "allow_pangolin_${var.owner}"
   description = "Allow Pangolin inbound traffic and all outbound traffic"
 
   ingress {

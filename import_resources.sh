@@ -45,7 +45,7 @@ ebs_volume_id=$(aws ec2 describe-volumes \
   --query "Volumes[0].VolumeId" --output text)
 
 security_group_id=$(aws ec2 describe-security-groups \
-  --filters "Name=group-name,Values=allow_pangolin" \
+  --filters "Name=group-name,Values=allow_pangolin_${OWNER}" \
   --query "SecurityGroups[0].GroupId" --output text)
 
 dlm_policy_id=$(aws dlm get-lifecycle-policies \
@@ -66,8 +66,8 @@ tofu import module.pangolin_server.aws_ebs_volume.pangolin             "$ebs_vol
 tofu import module.pangolin_server.aws_volume_attachment.pangolin_ebs_att \
   "${ebs_volume_id}:${instance_id}:/dev/sdh"
 tofu import module.pangolin_server.aws_security_group.allow_pangolin   "$security_group_id"
-tofu import module.pangolin_server.aws_iam_role.dlm_lifecycle_role     "dlm-lifecycle-role"
-tofu import module.pangolin_server.aws_iam_role_policy.dlm_lifecycle   "dlm-lifecycle-role:dlm-lifecycle-policy"
+tofu import module.pangolin_server.aws_iam_role.dlm_lifecycle_role     "dlm-lifecycle-role-${OWNER}"
+tofu import module.pangolin_server.aws_iam_role_policy.dlm_lifecycle   "dlm-lifecycle-role-${OWNER}:dlm-lifecycle-policy-${OWNER}"
 tofu import module.pangolin_server.aws_dlm_lifecycle_policy.pangolin_snapshots "$dlm_policy_id"
 
 # Route53 records are only present when a custom domain is configured.

@@ -29,6 +29,12 @@ variable "pangolin_server_secret" {
   sensitive   = true
 }
 
+variable "owner" {
+  description = "Short identifier for the deployer (e.g. GitHub username). Used to namespace resource names so multiple team members can deploy in the same AWS account."
+  type        = string
+  default     = "pangolin"
+}
+
 variable "key_name" {
   description = "Name of the AWS EC2 key pair to use for SSH access. Leave empty to disable SSH entirely."
   type        = string
