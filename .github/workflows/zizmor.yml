@@ -1,0 +1,43 @@
+# Static analysis of GitHub Actions workflows using Zizmor.
+# Runs on every push or pull request that touches .github/workflows/.
+# Findings are uploaded as SARIF and shown in the Security tab.
+# Docs: https://woodruffw.github.io/zizmor/
+
+name: Zizmor static analysis
+
+on:
+  push:
+    paths:
+      - ".github/workflows/**"
+  pull_request:
+    paths:
+      - ".github/workflows/**"
+
+permissions: {}
+
+jobs:
+  zizmor:
+    name: Scan workflows
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      security-events: write # Required to upload SARIF results
+
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
+        with:
+          persist-credentials: false
+
+      - name: Install Zizmor
+        run: pip install zizmor==1.24.1
+
+      - name: Run Zizmor
+        run: zizmor --format sarif . > zizmor-results.sarif
+        continue-on-error: true # Upload results even when findings are present
+
+      - name: Upload SARIF results
+        uses: github/codeql-action/upload-sarif@ff0a06e83cb2de871e5a09832bc6a81e7276941f # v3.28.18
+        with:
+          sarif_file: zizmor-results.sarif
+          category: zizmor
