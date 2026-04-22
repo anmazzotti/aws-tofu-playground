@@ -19,10 +19,15 @@ on:
     - cron: "0 3 * * 0" # Sundays at 03:00 UTC — after Saturday's EBS snapshot
   workflow_dispatch:
 
+permissions: {} # No GitHub token permissions needed — all access is via AWS credentials
+
 jobs:
   refresh:
     name: Refresh Pangolin instance
     runs-on: ubuntu-latest
+
+    permissions:
+      contents: read # Minimum required to checkout the repository
 
     env:
       TF_VAR_owner: ${{ vars.OWNER }}
@@ -31,12 +36,12 @@ jobs:
       TF_VAR_pangolin_server_secret: ${{ secrets.TF_VAR_PANGOLIN_SERVER_SECRET }}
 
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4.3.1
 
-      - uses: opentofu/setup-opentofu@v1
+      - uses: opentofu/setup-opentofu@9d84900f3238fab8cd84ce47d658d25dd008be2f # v1.0.8
 
       - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v4
+        uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4.3.1
         with:
           aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
