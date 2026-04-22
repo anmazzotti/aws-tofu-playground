@@ -61,3 +61,16 @@ jobs:
 
       - name: Recreate instance with current configuration
         run: tofu apply -auto-approve
+
+      - name: Write job summary
+        run: |
+          PANGOLIN_URL=$(tofu output -raw pangolin_url)
+          INSTANCE_ID=$(tofu output -raw instance_id)
+          {
+            echo "### ✅ Pangolin refresh complete"
+            echo "| | |"
+            echo "|---|---|"
+            echo "| **Dashboard** | $PANGOLIN_URL |"
+            echo "| **Instance** | \`$INSTANCE_ID\` |"
+            echo "| **Refreshed** | $(date -u '+%Y-%m-%d %H:%M UTC') |"
+          } >> "$GITHUB_STEP_SUMMARY"

@@ -33,25 +33,9 @@ This repository implements EDR 009: Pangolin as a Replacement for Ngrok.
    └───────────────────────────────────┘
 ```
 
-- **EC2 `t3.micro`** (Debian 13, `eu-west-2a`) — Pangolin + Gerbil + Traefik via Docker Compose,
-  managed as a systemd service.
-- **Elastic IP** — stable public endpoint that survives instance stops and starts.
-- **EBS 1 GB** mounted at `/opt/pangolin` — persists Pangolin configuration and Let's Encrypt
-  certificates across reboots and instance replacements.
-- **DLM snapshot policy** — weekly EBS snapshot every Saturday at 04:00 UTC, last 5 retained.
-- **Domain** — automatically derived from the Elastic IP using `sslip.io`
-  (e.g. `pangolin.1-2-3-4.sslip.io`). No DNS delegation required.
-- **TLS** — Let's Encrypt, HTTP-01 challenge via Traefik.
-
-## Prerequisites
-
-- [OpenTofu](https://opentofu.org/) ≥ 1.6
-- AWS credentials with the following permissions: EC2 (instances, EIPs, security groups, EBS,
-  DLM), IAM (role + policy creation for DLM).
-- An [EC2 key pair](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html) in
-  `eu-west-2` — required if you enable SSH access (`key_name` + `ssh_allowed_cidrs`).
-
 ## Quickstart
+
+> **Prerequisites:** [OpenTofu](https://opentofu.org/) ≥ 1.6, AWS credentials (EC2/EBS/IAM/DLM permissions), and an [EC2 key pair](https://docs.aws.amazon.com/AWSEC2/latest/UserGuide/ec2-key-pairs.html) if you plan to enable SSH access.
 
 ```sh
 # 1. Copy and fill in your variables
@@ -117,6 +101,22 @@ bundled `pangolin_init.sh`: `owner_email`, `pangolin_server_secret`, `pangolin_d
 
 ## Connecting a cluster
 
+`connect-cluster.sh` automates the Helm setup. Run it after creating a Site and Resource in
+the Pangolin dashboard:
+
+```sh
+./connect-cluster.sh
+```
+
+It prompts for the Pangolin URL (auto-detected from `tofu output` if available), Site ID, and
+Site secret, then installs the Newt Helm chart and waits for the pod to become ready. Set
+`PANGOLIN_URL`, `NEWT_SITE_ID`, and `NEWT_SITE_SECRET` as environment variables to skip the
+prompts (useful in CI).
+
+### Manual steps in the Pangolin dashboard
+
+Before running the script you need to create a Site and at least one Resource:
+
 ### 1. Create a Site
 
 In the Pangolin dashboard:
@@ -133,29 +133,16 @@ In the Pangolin dashboard:
 3. Set a **subdomain** for the resource, e.g. `rancher` → accessible at
    `https://rancher.<elastic-ip>.sslip.io`.
 
-### 3. Install Newt on the local cluster
+### 2. Create a Resource
 
-Use the [Newt Helm chart](https://github.com/fosrl/newt) to connect your local kind cluster to
-the Pangolin server:
+1. Go to **Resources → New Resource** under your Site.
+2. Set the **Target** to a cluster-internal address — always use `*.svc.cluster.local`, never bare
+   IPs or external hostnames (EDR 009 mandatory requirement).  
+   Example: `rancher.cattle-system.svc.cluster.local:80`
+3. Set a **subdomain** for the resource, e.g. `rancher` → accessible at
+   `https://rancher.<elastic-ip>.sslip.io`.
 
-```sh
-helm repo add pangolin https://charts.pangolin.net
-helm repo update
-
-# Store Site credentials as a Kubernetes Secret — never in plaintext Helm values
-kubectl create namespace newt-system
-kubectl create secret generic newt-site \
-  --namespace newt-system \
-  --from-literal=id=<SITE_ID> \
-  --from-literal=secret=<SITE_SECRET>
-
-helm install newt pangolin/newt \
-  --namespace newt-system \
-  --set pangolin.endpoint=https://pangolin.<elastic-ip>.sslip.io \
-  --set site.existingSecret=newt-site
-```
-
-> See the Newt chart documentation for the exact secret key names.
+Then run `./connect-cluster.sh`.
 
 ## Security
 
@@ -229,19 +216,14 @@ to the standard EC2/IAM/DLM permissions.
 Stopping the instance during idle periods (nights, weekends) is the easiest way to reduce costs.
 The Elastic IP, EBS volume, and snapshots continue to accrue charges regardless.
 
-### Stateless instance refresh
+### Automated refresh
 
-No `.tfstate` file is persisted between runs. Instead, `import_resources.sh` re-hydrates a
-fresh local state by discovering existing resources from AWS tags and importing them. This
-removes the need to store or protect a state file — useful for ephemeral CI environments.
+No `.tfstate` file is persisted between runs. `import_resources.sh` re-hydrates a fresh local
+state by discovering existing resources from AWS tags, removing the need to store or protect a
+state file. The EBS volume and Elastic IP are **never destroyed**, so Pangolin configuration,
+Let's Encrypt certificates, and the dashboard URL survive every refresh.
 
-```sh
-OWNER=yourname ./import_resources.sh
-```
-
-The script imports all long-lived resources (Elastic IP, EBS volume, IAM role, DLM policy,
-security group, and the current EC2 instance). Once state is hydrated you can do a targeted
-destroy-and-recreate to replace only the instance while leaving everything else intact:
+To run the cycle manually:
 
 ```sh
 OWNER=yourname ./import_resources.sh
@@ -249,17 +231,8 @@ tofu destroy -target module.pangolin_server.aws_instance.pangolin
 tofu apply
 ```
 
-The EBS volume and Elastic IP are **never destroyed**, so Pangolin configuration, Let's Encrypt
-certificates, and the dashboard URL all survive. The new instance boots with the current
-`pangolin_init.sh`, pulling the pinned image versions.
-
-### Weekly automated refresh
-
-`.github/workflows/weekly-refresh.yml` automates the destroy-and-recreate cycle every Sunday at
-03:00 UTC — after Saturday's EBS snapshot. It runs `import_resources.sh`, destroys the
-instance, and re-applies, all without a persisted state file.
-
-Configure the following in your GitHub repository before enabling the workflow:
+`.github/workflows/weekly-refresh.yml` automates this every Sunday at 03:00 UTC — after
+Saturday's EBS snapshot. Configure the following in your GitHub repository to enable it:
 
 | Type | Name | Value |
 |---|---|---|
