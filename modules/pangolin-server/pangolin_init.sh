@@ -89,7 +89,15 @@ PermitRootLogin no
 SSHEOF
 systemctl restart ssh
 
+# Pin the Docker GPG key to a known-good checksum.
+# If Docker rotates the key, update this value — see:
+#   https://download.docker.com/linux/debian/gpg
+# To regenerate: curl -fsSL https://download.docker.com/linux/debian/gpg | sha256sum
+DOCKER_GPG_SHA256="1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570"
+
 curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+echo "${DOCKER_GPG_SHA256}  /etc/apt/keyrings/docker.asc" | sha256sum --check --status \
+  || { echo "ERROR: Docker GPG key checksum mismatch — aborting"; exit 1; }
 chmod a+r /etc/apt/keyrings/docker.asc
 
 # Add the repository to Apt sources:
@@ -114,7 +122,7 @@ cat << EOF > $pangolin_docker_compose_path
 name: pangolin
 services:
   pangolin:
-    image: docker.io/fosrl/pangolin:1.17.1 # https://github.com/fosrl/pangolin/releases
+    image: docker.io/fosrl/pangolin:1.17.1@sha256:c8002c5acf73a6e6e85f61be38036b4eb35afeb99c4d52501c737f0257d4c673 # https://github.com/fosrl/pangolin/releases
     container_name: pangolin
     restart: unless-stopped
     volumes:
@@ -126,7 +134,7 @@ services:
       retries: 15
 
   gerbil:
-    image: docker.io/fosrl/gerbil:1.3.1 # https://github.com/fosrl/gerbil/releases
+    image: docker.io/fosrl/gerbil:1.3.1@sha256:b16a722d5603fa74acd3e1deb86cea0b8330d015ab5325dc41e44108fe6f29c9 # https://github.com/fosrl/gerbil/releases
     container_name: gerbil
     restart: unless-stopped
     depends_on:
@@ -149,7 +157,7 @@ services:
       - 80:80
 
   traefik:
-    image: docker.io/traefik:v3.6.13
+    image: docker.io/traefik:v3.6.13@sha256:34d5089d0b414945342848518b383f11f5b3a645504ed87b77ffeb9d683d0e48
     container_name: traefik
     restart: unless-stopped
 
