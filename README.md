@@ -9,7 +9,7 @@ This repository implements EDR 009: Pangolin as a Replacement for Ngrok.
 
 ```
 ┌──────────────────────────────────────────────┐
-│  AWS eu-west-2a                               │
+│  AWS <region>a (default: eu-west-2a)          │
 │                                              │
 │  ┌──────────────────────────────────────┐   │
 │  │  EC2 t3.micro (Debian 13)            │   │
@@ -101,22 +101,6 @@ bundled `pangolin_init.sh`: `owner_email`, `pangolin_server_secret`, `pangolin_d
 
 ## Connecting a cluster
 
-`connect-cluster.sh` automates the Helm setup. Run it after creating a Site and Resource in
-the Pangolin dashboard:
-
-```sh
-./connect-cluster.sh
-```
-
-It prompts for the Pangolin URL (auto-detected from `tofu output` if available), Site ID, and
-Site secret, then installs the Newt Helm chart and waits for the pod to become ready. Set
-`PANGOLIN_URL`, `NEWT_SITE_ID`, and `NEWT_SITE_SECRET` as environment variables to skip the
-prompts (useful in CI).
-
-### Manual steps in the Pangolin dashboard
-
-Before running the script you need to create a Site and at least one Resource:
-
 ### 1. Create a Site
 
 In the Pangolin dashboard:
@@ -133,16 +117,18 @@ In the Pangolin dashboard:
 3. Set a **subdomain** for the resource, e.g. `rancher` → accessible at
    `https://rancher.<elastic-ip>.sslip.io`.
 
-### 2. Create a Resource
+### 3. Run connect-cluster.sh
 
-1. Go to **Resources → New Resource** under your Site.
-2. Set the **Target** to a cluster-internal address — always use `*.svc.cluster.local`, never bare
-   IPs or external hostnames (EDR 009 mandatory requirement).  
-   Example: `rancher.cattle-system.svc.cluster.local:80`
-3. Set a **subdomain** for the resource, e.g. `rancher` → accessible at
-   `https://rancher.<elastic-ip>.sslip.io`.
+`connect-cluster.sh` handles the Kubernetes and Helm steps automatically:
 
-Then run `./connect-cluster.sh`.
+```sh
+./connect-cluster.sh
+```
+
+It prompts for the Pangolin URL (auto-detected from `tofu output` if available), Site ID, and
+Site secret, then creates the namespace and credentials Secret, installs the Newt Helm chart,
+and waits for the pod to become ready. Set `PANGOLIN_URL`, `NEWT_SITE_ID`, and
+`NEWT_SITE_SECRET` as environment variables to skip the prompts (useful in CI).
 
 ## Security
 
@@ -202,7 +188,7 @@ to the standard EC2/IAM/DLM permissions.
 
 ## Maintenance
 
-### Costs (eu-west-2, ~150 GB/month outbound)
+### Costs (eu-west-2 pricing — costs vary by region)
 
 | Resource | Running | Stopped |
 |---|---|---|
