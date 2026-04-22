@@ -1,4 +1,4 @@
-# aws-tofu-playground
+# terraform-aws-pangolin
 
 OpenTofu configuration to deploy a self-hosted [Pangolin](https://github.com/fosrl/pangolin)
 tunnelling server on AWS, replacing Ngrok for local Rancher development environments.
@@ -96,7 +96,7 @@ Other teams can consume the `pangolin-server` module directly from this reposito
 
 ```hcl
 module "pangolin_server" {
-  source = "github.com/anmazzotti/aws-tofu-playground//modules/pangolin-server?ref=<tag>"
+  source = "github.com/anmazzotti/terraform-aws-pangolin//modules/pangolin-server?ref=<tag>"
 
   region                 = "us-east-1"
   owner                  = "alice"
