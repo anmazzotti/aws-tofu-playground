@@ -41,7 +41,7 @@ if [ -n "$pangolin_custom_domain" ]; then
   # Custom domain provided via OpenTofu variable — derive base domain by stripping
   # the first DNS label: "pangolin.example.com" → "example.com"
   pangolin_domain="$pangolin_custom_domain"
-  pangolin_base_domain="${pangolin_custom_domain#*.}"
+  pangolin_base_domain="$${pangolin_custom_domain#*.}"
 else
   # No custom domain: use sslip.io for zero-configuration DNS.
   pangolin_base_domain="$pangolin_public_ip.sslip.io"
@@ -106,7 +106,7 @@ systemctl restart ssh
 DOCKER_GPG_SHA256="1500c1f56fa9e26b9b8f42452a553675796ade0807cdce11975eb98170b3a570"
 
 curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
-echo "${DOCKER_GPG_SHA256}  /etc/apt/keyrings/docker.asc" | sha256sum --check --status \
+echo "$${DOCKER_GPG_SHA256}  /etc/apt/keyrings/docker.asc" | sha256sum --check --status \
   || { echo "ERROR: Docker GPG key checksum mismatch — aborting"; exit 1; }
 chmod a+r /etc/apt/keyrings/docker.asc
 
