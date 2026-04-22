@@ -24,5 +24,5 @@ output "elastic_ip" {
 
 output "pangolin_url" {
   description = "Pangolin dashboard URL."
-  value       = "https://pangolin.${aws_eip.pangolin.public_ip}.sslip.io"
+  value       = local.use_custom_domain ? "https://${var.custom_domain}" : "https://pangolin.${aws_eip.pangolin.public_ip}.sslip.io"
 }

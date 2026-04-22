@@ -35,8 +35,18 @@ traefik_dynamic_config_path="$traefik_config_dir/dynamic_config.yml"
 
 filesystem=$(file -s $pangolin_device)
 pangolin_public_ip=$(ec2metadata --public-ipv4)
-pangolin_base_domain="$pangolin_public_ip.sslip.io"
-pangolin_domain="pangolin.$pangolin_base_domain"
+pangolin_custom_domain="${pangolin_custom_domain}"
+
+if [ -n "$pangolin_custom_domain" ]; then
+  # Custom domain provided via OpenTofu variable — derive base domain by stripping
+  # the first DNS label: "pangolin.example.com" → "example.com"
+  pangolin_domain="$pangolin_custom_domain"
+  pangolin_base_domain="${pangolin_custom_domain#*.}"
+else
+  # No custom domain: use sslip.io for zero-configuration DNS.
+  pangolin_base_domain="$pangolin_public_ip.sslip.io"
+  pangolin_domain="pangolin.$pangolin_base_domain"
+fi
 
 pangolin_server_secret=${pangolin_server_secret}
 owner_email=${owner_email}

@@ -79,3 +79,25 @@ resource "aws_security_group" "allow_pangolin" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 }
+
+# Route53 DNS records — only created when hosted_zone_id and custom_domain are both set.
+# Creates two A records pointing to the Elastic IP:
+#   <custom_domain>      → Pangolin dashboard
+#   *.<parent_domain>    → Resource tunnel subdomains (e.g. myapp.example.com)
+resource "aws_route53_record" "pangolin_dashboard" {
+  count   = local.use_custom_domain ? 1 : 0
+  zone_id = var.hosted_zone_id
+  name    = var.custom_domain
+  type    = "A"
+  ttl     = 60
+  records = [aws_eip.pangolin.public_ip]
+}
+
+resource "aws_route53_record" "pangolin_wildcard" {
+  count   = local.use_custom_domain ? 1 : 0
+  zone_id = var.hosted_zone_id
+  name    = "*.${local.pangolin_base_domain}"
+  type    = "A"
+  ttl     = 60
+  records = [aws_eip.pangolin.public_ip]
+}

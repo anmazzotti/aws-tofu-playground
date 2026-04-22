@@ -42,7 +42,24 @@ variable "ssh_allowed_cidrs" {
 }
 
 variable "user_data_template" {
-  description = "Path to a custom cloud-init bash script template. Defaults to the bundled pangolin_init.sh. The template receives: owner_email, pangolin_server_secret, pangolin_device."
+  description = "Path to a custom cloud-init bash script template. Defaults to the bundled pangolin_init.sh. The template receives: owner_email, pangolin_server_secret, pangolin_device, pangolin_custom_domain."
   type        = string
   default     = ""
+}
+
+variable "hosted_zone_id" {
+  description = "Route53 hosted zone ID for the parent domain (e.g. the zone for 'example.com'). Must be set together with custom_domain. Leave empty to use the automatic sslip.io domain."
+  type        = string
+  default     = ""
+}
+
+variable "custom_domain" {
+  description = "Fully-qualified domain for the Pangolin dashboard (e.g. 'pangolin.example.com'). When set, two Route53 A records are created: one for this name and a wildcard for the parent zone (*.example.com) covering resource tunnels. Must be set together with hosted_zone_id."
+  type        = string
+  default     = ""
+
+  validation {
+    condition     = var.custom_domain == "" || can(regex("^[^.]+\\.[^.]+\\..+$", var.custom_domain))
+    error_message = "custom_domain must be a subdomain with at least two parent labels, e.g. 'pangolin.example.com'."
+  }
 }

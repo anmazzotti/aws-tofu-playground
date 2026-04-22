@@ -58,18 +58,14 @@ This repository implements EDR 009: Pangolin as a Replacement for Ngrok.
 cp terraform.tfvars.example terraform.tfvars
 $EDITOR terraform.tfvars
 
-# 2. Initialise providers
-tofu init
-
-# 3. Review the plan
-tofu plan
-
-# 4. Deploy
-tofu apply
+# 2. Run the bootstrap script — provisions everything and creates the first admin account
+./bootstrap.sh
 ```
 
-After `apply` completes the Pangolin dashboard URL is printed by `tofu output`. Bootstrap takes
-~3–5 minutes. Follow the cloud-init progress via AWS SSM:
+The script runs `tofu init`, shows you the plan, asks for confirmation, applies, then polls
+the Pangolin API and creates the initial admin account automatically.
+
+Follow the cloud-init progress at any point via AWS SSM:
 
 ```sh
 aws ssm start-session --target <instance-id>
@@ -86,7 +82,9 @@ sudo tail -f /var/log/cloud-init-output.log
 | `pangolin_server_secret` | Pangolin server secret (sensitive) | **required** |
 | `key_name` | EC2 key pair name for SSH. Leave empty to disable SSH | `""` |
 | `ssh_allowed_cidrs` | Your public IP as a `/32`. Leave empty for no SSH | `[]` |
-| `user_data_template` | Path to a custom bootstrap script template. Receives `owner_email`, `pangolin_server_secret`, `pangolin_device` | bundled `pangolin_init.sh` |
+| `hosted_zone_id` | Route53 hosted zone ID. Set together with `custom_domain` to use a real domain instead of sslip.io | `""` |
+| `custom_domain` | Fully-qualified Pangolin dashboard domain (e.g. `pangolin.example.com`). Creates A records for the dashboard and `*.<parent>` for tunnels | `""` |
+| `user_data_template` | Path to a custom bootstrap script template. Receives `owner_email`, `pangolin_server_secret`, `pangolin_device`, `pangolin_custom_domain` | bundled `pangolin_init.sh` |
 
 > `terraform.tfvars` is gitignored. **Never commit real values.**
 
@@ -111,15 +109,18 @@ output "pangolin_url" {
 
 To use a customised bootstrap script while reusing the rest of the infrastructure, pass a path
 to your own template via `user_data_template`. The template receives the same variables as the
-bundled `pangolin_init.sh`: `owner_email`, `pangolin_server_secret`, `pangolin_device`.
+bundled `pangolin_init.sh`: `owner_email`, `pangolin_server_secret`, `pangolin_device`,
+`pangolin_custom_domain`.
 
 ## Post-deployment: setting up Pangolin
 
 ### 1. Create the first admin account
 
-Open the dashboard URL and complete the initial account setup. Registration is
-invite-only by default (`disable_signup_without_invite: true`) — the first admin can issue
-invites for additional team members.
+`bootstrap.sh` does this automatically — it polls the Pangolin API after `apply` and creates
+the admin account via the API. If you skipped `bootstrap.sh` or the automated step failed,
+open the dashboard URL printed by `tofu output pangolin_url` and complete registration manually.
+Registration is invite-only after the first account is created (`disable_signup_without_invite: true`);
+the first admin can issue invites for additional team members.
 
 ### 2. Create a Site
 
@@ -183,10 +184,20 @@ Recommended controls (EDR 009):
 
 ### Domain note
 
-This configuration uses `sslip.io` (IP-based wildcard DNS) for simplicity. EDR 009 specifies a
-**dedicated domain**. If you need one, update `pangolin_base_domain` in `pangolin_init.sh` to
-your domain and configure DNS A records for both the apex and `*.<domain>` pointing to the
-Elastic IP.
+By default this configuration uses `sslip.io` (IP-based wildcard DNS) — no DNS delegation
+required. To use a real domain, set `hosted_zone_id` and `custom_domain` in `terraform.tfvars`:
+
+```hcl
+hosted_zone_id = "Z1PA6795UKMFR9"   # Route53 hosted zone for example.com
+custom_domain  = "pangolin.example.com"
+```
+
+This creates two Route53 A records pointing to the Elastic IP:
+- `pangolin.example.com` — Pangolin dashboard
+- `*.example.com` — resource tunnel subdomains (e.g. `rancher.example.com`)
+
+The AWS credentials need `route53:ChangeResourceRecordSets` and `route53:GetChange` in addition
+to the standard EC2/IAM/DLM permissions.
 
 ## Maintenance
 

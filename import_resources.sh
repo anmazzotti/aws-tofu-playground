@@ -69,3 +69,13 @@ tofu import module.pangolin_server.aws_security_group.allow_pangolin   "$securit
 tofu import module.pangolin_server.aws_iam_role.dlm_lifecycle_role     "dlm-lifecycle-role"
 tofu import module.pangolin_server.aws_iam_role_policy.dlm_lifecycle   "dlm-lifecycle-role:dlm-lifecycle-policy"
 tofu import module.pangolin_server.aws_dlm_lifecycle_policy.pangolin_snapshots "$dlm_policy_id"
+
+# Route53 records are only present when a custom domain is configured.
+if [ -n "${TF_VAR_hosted_zone_id:-}" ] && [ -n "${TF_VAR_custom_domain:-}" ]; then
+  base_domain=$(echo "$TF_VAR_custom_domain" | cut -d. -f2-)
+  echo "Importing Route53 records for $TF_VAR_custom_domain ..."
+  tofu import 'module.pangolin_server.aws_route53_record.pangolin_dashboard[0]' \
+    "${TF_VAR_hosted_zone_id}_${TF_VAR_custom_domain}_A"
+  tofu import 'module.pangolin_server.aws_route53_record.pangolin_wildcard[0]' \
+    "${TF_VAR_hosted_zone_id}_*.${base_domain}_A"
+fi

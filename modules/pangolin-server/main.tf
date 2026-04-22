@@ -15,6 +15,19 @@
 locals {
   availability_zone  = "${var.region}a"
   user_data_template = var.user_data_template != "" ? var.user_data_template : "${path.module}/pangolin_init.sh"
+
+  # Custom domain: both hosted_zone_id and custom_domain must be set together.
+  use_custom_domain    = var.hosted_zone_id != "" && var.custom_domain != ""
+  _domain_labels       = split(".", var.custom_domain)
+  # Strip the first DNS label to get the parent zone: "pangolin.example.com" → "example.com"
+  pangolin_base_domain = local.use_custom_domain ? join(".", slice(local._domain_labels, 1, length(local._domain_labels))) : ""
+}
+
+check "dns_config" {
+  assert {
+    condition     = (var.custom_domain != "") == (var.hosted_zone_id != "")
+    error_message = "custom_domain and hosted_zone_id must both be set or both be empty."
+  }
 }
 
 data "aws_ami" "debian" {
@@ -39,6 +52,7 @@ resource "aws_instance" "pangolin" {
       owner_email            = var.owner_email
       pangolin_server_secret = var.pangolin_server_secret
       pangolin_device        = "/dev/nvme1n1"
+      pangolin_custom_domain = var.custom_domain
     }
   )
 }
