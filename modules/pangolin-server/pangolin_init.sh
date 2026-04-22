@@ -33,8 +33,19 @@ traefik_config_dir="$pangolin_config_dir/traefik"
 traefik_static_config_path="$traefik_config_dir/traefik_config.yml"
 traefik_dynamic_config_path="$traefik_config_dir/dynamic_config.yml"
 
+
+# Wait for the EBS volume to be attached (it arrives a few seconds after the
+# cloud-init script starts on Nitro instances).
+echo "Waiting for $pangolin_device to become available..."
+for i in $(seq 1 30); do
+  [ -b "$pangolin_device" ] && break
+  echo "  Device not ready yet (attempt $i/30), waiting 2s..."
+  sleep 2
+done
+[ -b "$pangolin_device" ] || { echo "ERROR: $pangolin_device did not appear after 60s"; exit 1; }
+
 filesystem=$(file -s $pangolin_device)
-pangolin_public_ip=$(ec2metadata --public-ipv4)
+pangolin_public_ip=$(curl -s --connect-timeout 5 http://169.254.169.254/latest/meta-data/public-ipv4 || true)
 pangolin_custom_domain="${pangolin_custom_domain}"
 
 if [ -n "$pangolin_custom_domain" ]; then
@@ -49,6 +60,7 @@ else
 fi
 
 pangolin_server_secret=${pangolin_server_secret}
+pangolin_setup_token=${pangolin_setup_token}
 owner_email=${owner_email}
 
 if [ "$filesystem" == "$pangolin_device: data" ]; then
@@ -136,6 +148,8 @@ services:
     image: docker.io/fosrl/pangolin:1.17.1@sha256:c8002c5acf73a6e6e85f61be38036b4eb35afeb99c4d52501c737f0257d4c673 # https://github.com/fosrl/pangolin/releases
     container_name: pangolin
     restart: unless-stopped
+    environment:
+      - PANGOLIN_SETUP_TOKEN=$pangolin_setup_token
     volumes:
       - ./config:/app/config
     healthcheck:
