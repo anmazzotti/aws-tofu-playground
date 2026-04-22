@@ -63,7 +63,10 @@ $EDITOR terraform.tfvars
 ```
 
 The script runs `tofu init`, shows you the plan, asks for confirmation, applies, then polls
-the Pangolin API and creates the initial admin account automatically.
+the Pangolin API and creates the initial admin account automatically. If the automated signup
+step fails, open the dashboard URL and complete registration manually — registration is
+invite-only after the first account exists, so the first admin can then issue invites for
+additional team members.
 
 Follow the cloud-init progress at any point via AWS SSM:
 
@@ -112,24 +115,16 @@ to your own template via `user_data_template`. The template receives the same va
 bundled `pangolin_init.sh`: `owner_email`, `pangolin_server_secret`, `pangolin_device`,
 `pangolin_custom_domain`.
 
-## Post-deployment: setting up Pangolin
+## Connecting a cluster
 
-### 1. Create the first admin account
-
-`bootstrap.sh` does this automatically — it polls the Pangolin API after `apply` and creates
-the admin account via the API. If you skipped `bootstrap.sh` or the automated step failed,
-open the dashboard URL printed by `tofu output pangolin_url` and complete registration manually.
-Registration is invite-only after the first account is created (`disable_signup_without_invite: true`);
-the first admin can issue invites for additional team members.
-
-### 2. Create a Site
+### 1. Create a Site
 
 In the Pangolin dashboard:
 
 1. Go to **Sites → New Site**.
 2. Give it a name (e.g. your cluster name) and save the **Site ID** and **Secret**.
 
-### 3. Create a Resource
+### 2. Create a Resource
 
 1. Go to **Resources → New Resource** under your Site.
 2. Set the **Target** to a cluster-internal address — always use `*.svc.cluster.local`, never bare
@@ -138,7 +133,7 @@ In the Pangolin dashboard:
 3. Set a **subdomain** for the resource, e.g. `rancher` → accessible at
    `https://rancher.<elastic-ip>.sslip.io`.
 
-### 4. Install Newt on the local cluster
+### 3. Install Newt on the local cluster
 
 Use the [Newt Helm chart](https://github.com/fosrl/newt) to connect your local kind cluster to
 the Pangolin server:
