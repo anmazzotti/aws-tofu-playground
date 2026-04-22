@@ -1,13 +1,70 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
   "extends": ["config:recommended"],
+
+  "dependencyDashboard": true,
+  "osvVulnerabilityAlerts": true,
+
+  "schedule": ["before 9am on Monday"],
+  "minimumReleaseAge": "3 days",
+  "prHourlyLimit": 2,
+  "prConcurrentLimit": 10,
+
+  "packageRules": [
+    {
+      "description": "Vulnerability fixes: bypass the stability window and merge immediately",
+      "isVulnerabilityAlert": true,
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash",
+      "minimumReleaseAge": "0 days",
+      "labels": ["security"]
+    },
+    {
+      "description": "Minor, patch and digest updates: auto-merge after the 3-day stability window",
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "automerge": true,
+      "automergeType": "pr",
+      "automergeStrategy": "squash",
+      "labels": ["dependencies"]
+    },
+    {
+      "description": "Major updates: request maintainer review, never auto-merge",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "reviewers": ["anmazzotti"],
+      "labels": ["dependencies", "major-update"]
+    },
+    {
+      "description": "Group Pangolin, Gerbil and Traefik — they are deployed together as one stack",
+      "matchManagers": ["regex"],
+      "groupName": "pangolin stack",
+      "groupSlug": "pangolin-stack"
+    },
+    {
+      "description": "Group GitHub Actions minor/patch/digest updates — one PR per batch",
+      "matchManagers": ["github-actions"],
+      "matchUpdateTypes": ["minor", "patch", "digest"],
+      "groupName": "github actions",
+      "groupSlug": "github-actions"
+    }
+  ],
+
   "regexManagers": [
     {
+      "description": "Docker images pinned with digest in pangolin_init.sh",
       "fileMatch": ["^modules/pangolin-server/pangolin_init\\.sh$"],
       "matchStrings": [
         "image: docker\\.io/(?<depName>[^:]+):(?<currentValue>[^@\\s#\\n]+)@(?<currentDigest>sha256:[a-f0-9]+)"
       ],
       "datasourceTemplate": "docker"
+    },
+    {
+      "description": "Zizmor pip package pinned in the zizmor workflow",
+      "fileMatch": ["^\\.github/workflows/zizmor\\.yml$"],
+      "matchStrings": ["pip install zizmor==(?<currentValue>[^\\s]+)"],
+      "depNameTemplate": "zizmor",
+      "datasourceTemplate": "pypi"
     }
   ]
 }
