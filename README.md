@@ -182,6 +182,25 @@ Recommended controls (EDR 009):
 - Consider running the kind cluster inside an isolated VM (Lima / Multipass) with no VPN
   interface to eliminate the lateral-movement risk surface entirely.
 
+### Supply chain hardening
+
+Several controls address software supply chain risks beyond the EDR 009 baseline:
+
+- **Container image digest pinning** — all three images (`pangolin`, `gerbil`, `traefik`) are
+  referenced as `<image>:<tag>@sha256:<digest>`. A mutable tag can be silently reassigned to a
+  different image; a content-addressable digest cannot.
+- **Docker GPG key validation** — `pangolin_init.sh` downloads Docker's repository signing key
+  and verifies it against a pinned SHA256 before importing it. A checksum mismatch aborts the
+  bootstrap.
+- **GitHub Actions pinned to commit SHAs** — every `uses:` step in `.github/workflows/` is
+  pinned to an immutable commit SHA (with the human-readable tag as a comment). Mutable tags
+  such as `@v4` can be force-pushed.
+- **Minimal workflow permissions** — both workflows declare `permissions: {}` at the top level
+  and grant only `contents: read` at job level. No workflow token is ever granted write access.
+- **Zizmor static analysis** (`.github/workflows/zizmor.yml`) — runs on every pull request that
+  touches `.github/workflows/`. Detects template injection, excessive permissions, and unsafe
+  action patterns. Results are uploaded as SARIF to the repository Security tab.
+
 ### Domain note
 
 By default this configuration uses `sslip.io` (IP-based wildcard DNS) — no DNS delegation
@@ -215,21 +234,35 @@ to the standard EC2/IAM/DLM permissions.
 Stopping the instance during idle periods (nights, weekends) is the easiest way to reduce costs.
 The Elastic IP, EBS volume, and snapshots continue to accrue charges regardless.
 
-### Weekly automated refresh
+### Stateless instance refresh
 
-A GitHub Action (`.github/workflows/weekly-refresh.yml`) runs every Sunday at 03:00 UTC — after
-Saturday's EBS snapshot. It refreshes the EC2 instance without maintaining any Terraform state:
+No `.tfstate` file is persisted between runs. Instead, `import_resources.sh` re-hydrates a
+fresh local state by discovering existing resources from AWS tags and importing them. This
+removes the need to store or protect a state file — useful for ephemeral CI environments.
 
+```sh
+OWNER=yourname ./import_resources.sh
 ```
-1. Import all existing AWS resources into a fresh local state
-2. tofu destroy -target module.pangolin_server.aws_instance.pangolin
-3. tofu apply
+
+The script imports all long-lived resources (Elastic IP, EBS volume, IAM role, DLM policy,
+security group, and the current EC2 instance). Once state is hydrated you can do a targeted
+destroy-and-recreate to replace only the instance while leaving everything else intact:
+
+```sh
+OWNER=yourname ./import_resources.sh
+tofu destroy -target module.pangolin_server.aws_instance.pangolin
+tofu apply
 ```
 
 The EBS volume and Elastic IP are **never destroyed**, so Pangolin configuration, Let's Encrypt
 certificates, and the dashboard URL all survive. The new instance boots with the current
-`pangolin_init.sh`, which pulls the pinned image versions. When Renovate merges a version bump
-PR, the next weekly run picks it up automatically.
+`pangolin_init.sh`, pulling the pinned image versions.
+
+### Weekly automated refresh
+
+`.github/workflows/weekly-refresh.yml` automates the destroy-and-recreate cycle every Sunday at
+03:00 UTC — after Saturday's EBS snapshot. It runs `import_resources.sh`, destroys the
+instance, and re-applies, all without a persisted state file.
 
 Configure the following in your GitHub repository before enabling the workflow:
 
@@ -241,6 +274,28 @@ Configure the following in your GitHub repository before enabling the workflow:
 | Variable | `OWNER` | Your name (matches resource tags) |
 | Variable | `OWNER_EMAIL` | Email for Let's Encrypt |
 | Variable | `AWS_REGION` | AWS region (optional, defaults to `eu-west-2`) |
+
+When Renovate merges a version-bump PR, the next weekly run picks it up automatically — no
+manual image update is ever needed.
+
+### Dependency updates (Renovate)
+
+`.github/renovate.json` configures [Renovate](https://docs.renovatebot.com/) to keep all
+pinned versions up to date with minimal noise:
+
+- **What it tracks**: Docker image tags and digests in `pangolin_init.sh`; GitHub Actions commit
+  SHAs in all workflow files; the AWS Terraform provider version; the `zizmor` pip package.
+- **Minor and patch**: PRs open on Monday mornings and auto-merge after a 3-day stability
+  window. The delay gives time for the ecosystem to surface regressions or CVEs before the
+  change lands.
+- **Vulnerability fixes**: bypass the stability window and auto-merge as soon as CI passes.
+  Renovate queries the [OSV database](https://osv.dev/) for known CVEs.
+- **Major versions**: a PR is opened and `anmazzotti` is requested as reviewer. Nothing merges
+  automatically — major bumps require a human decision.
+- **Grouping**: all three Pangolin-stack containers (`pangolin`, `gerbil`, `traefik`) are
+  batched into one PR since they are deployed together. GitHub Actions updates are also grouped.
+- **Dependency Dashboard**: Renovate creates a GitHub issue listing all pending, scheduled, and
+  ignored updates — a single place to see the state of all dependencies.
 
 ### Other tasks
 
