@@ -3,9 +3,9 @@
   "extends": ["config:recommended"],
   "regexManagers": [
     {
-      "fileMatch": ["^pangolin_init\\.sh$"],
+      "fileMatch": ["^modules/pangolin-server/pangolin_init\\.sh$"],
       "matchStrings": [
-        "image: docker\\.io/(?<depName>[^:]+):(?<currentValue>[^\\s#\\n]+)"
+        "image: docker\\.io/(?<depName>[^:]+):(?<currentValue>[^@\\s#\\n]+)@(?<currentDigest>sha256:[a-f0-9]+)"
       ],
       "datasourceTemplate": "docker"
     }
