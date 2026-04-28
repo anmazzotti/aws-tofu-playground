@@ -1,0 +1,321 @@
+#!/usr/bin/env bash
+ 
+set -e
+
+pangolin_dir="/opt/pangolin"
+pangolin_device="${pangolin_device}"
+
+pangolin_docker_compose_path="$pangolin_dir/docker-compose.yml"
+pangolin_docker_compose_systemd_unit_path="/etc/systemd/system/pangolin.service"
+
+pangolin_config_dir="$pangolin_dir/config"
+pangolin_config_path="$pangolin_config_dir/config.yml"
+
+traefik_config_dir="$pangolin_config_dir/traefik"
+traefik_static_config_path="$traefik_config_dir/traefik_config.yml"
+traefik_dynamic_config_path="$traefik_config_dir/dynamic_config.yml"
+
+filesystem=$(file -s $pangolin_device)
+pangolin_public_ip=$(ec2metadata --public-ipv4)
+pangolin_base_domain="$pangolin_public_ip.sslip.io"
+pangolin_domain="pangolin.$pangolin_base_domain"
+
+pangolin_server_secret=${pangolin_server_secret}
+owner_email=${owner_email}
+
+if [ "$filesystem" == "$pangolin_device: data" ]; then
+    echo "Initializing device $pangolin_device for the first time"
+    /usr/sbin/mkfs.ext4 $pangolin_device
+fi
+
+echo "Mounting $pangolin_device to $pangolin_dir"
+mkdir -p $pangolin_dir
+echo "$pangolin_device  $pangolin_dir  ext4     noatime  0 0" >> /etc/fstab # Adding entry to fstab to ensure mounting in case of instance reboot
+mount -a
+
+echo "Installing docker"
+# Add Docker's official GPG key:
+apt update
+apt install -y ca-certificates curl
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/debian/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+
+# Add the repository to Apt sources:
+tee /etc/apt/sources.list.d/docker.sources <<EOF
+Types: deb
+URIs: https://download.docker.com/linux/debian
+Suites: $(. /etc/os-release && echo "$VERSION_CODENAME")
+Components: stable
+Architectures: $(dpkg --print-architecture)
+Signed-By: /etc/apt/keyrings/docker.asc
+EOF
+apt update
+apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+
+echo "Configuring pangolin using domain $pangolin_domain" # Reference: https://docs.pangolin.net/self-host/manual/docker-compose
+mkdir -p $pangolin_config_dir
+mkdir -p $traefik_config_dir
+
+
+echo "Creating configuration: $pangolin_docker_compose_path"
+cat << EOF > $pangolin_docker_compose_path
+name: pangolin
+services:
+  pangolin:
+    image: docker.io/fosrl/pangolin:latest # https://github.com/fosrl/pangolin/releases
+    container_name: pangolin
+    restart: unless-stopped
+    volumes:
+      - ./config:/app/config
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/v1/"]
+      interval: "10s"
+      timeout: "10s"
+      retries: 15
+
+  gerbil:
+    image: docker.io/fosrl/gerbil:latest # https://github.com/fosrl/gerbil/releases
+    container_name: gerbil
+    restart: unless-stopped
+    depends_on:
+      pangolin:
+        condition: service_healthy
+    command:
+      - --reachableAt=http://gerbil:3004
+      - --generateAndSaveKeyTo=/var/config/key
+      - --remoteConfig=http://pangolin:3001/api/v1/
+    volumes:
+      - ./config/:/var/config
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    ports:
+      - 51820:51820/udp
+      - 21820:21820/udp
+      - 443:443
+      - 443:443/udp # For http3 QUIC if desired
+      - 80:80
+
+  traefik:
+    image: docker.io/traefik:v3.6
+    container_name: traefik
+    restart: unless-stopped
+
+    network_mode: service:gerbil # Ports appear on the gerbil service
+
+    depends_on:
+      pangolin:
+        condition: service_healthy
+    command:
+      - --configFile=/etc/traefik/traefik_config.yml
+    volumes:
+      - ./config/traefik:/etc/traefik:ro # Volume to store the Traefik configuration
+      - ./config/letsencrypt:/letsencrypt # Volume to store the Let's Encrypt certificates
+      - ./config/traefik/logs:/var/log/traefik # Volume to store Traefik logs
+
+networks:
+  default:
+    driver: bridge
+    name: pangolin
+    enable_ipv6: false
+EOF
+
+echo "Creating configuration: $pangolin_config_path"
+cat << EOF > $pangolin_config_path
+# To see all available options, please visit the docs:
+# https://docs.pangolin.net/
+
+gerbil:
+    start_port: 51820
+    base_endpoint: "$pangolin_domain"
+    # Optional network settings (defaults shown):
+    # subnet_group: "100.89.137.0/20"
+    # block_size: 24
+    # site_block_size: 30
+
+app:
+    dashboard_url: "https://$pangolin_domain"
+    log_level: "info"
+    telemetry:
+        anonymous_usage: true
+
+domains:
+    domain1:
+        base_domain: "$pangolin_base_domain"
+
+server:
+    secret: "$pangolin_server_secret"
+    cors:
+        origins: ["https://$pangolin_domain"]
+        methods: ["GET", "POST", "PUT", "DELETE", "PATCH"]
+        allowed_headers: ["X-CSRF-Token", "Content-Type"]
+        credentials: false
+
+flags:
+    require_email_verification: false
+    disable_signup_without_invite: true
+    disable_user_create_org: false
+    allow_raw_resources: true
+EOF
+
+echo "Creating configuration: $traefik_static_config_path"
+cat << EOF > $traefik_static_config_path
+api:
+  insecure: true
+  dashboard: true
+
+providers:
+  http:
+    endpoint: "http://pangolin:3001/api/v1/traefik-config"
+    pollInterval: "5s"
+  file:
+    filename: "/etc/traefik/dynamic_config.yml"
+
+experimental:
+  plugins:
+    badger:
+      moduleName: "github.com/fosrl/badger"
+      version: "v1.4.0"
+
+log:
+  level: "INFO"
+  format: "common"
+  maxSize: 100
+  maxBackups: 3
+  maxAge: 3
+  compress: true
+
+certificatesResolvers:
+  letsencrypt:
+    acme:
+      httpChallenge:
+        entryPoint: web
+      email: "$owner_email"
+      storage: "/letsencrypt/acme.json"
+      caServer: "https://acme-v02.api.letsencrypt.org/directory"
+
+entryPoints:
+  web:
+    address: ":80"
+  websecure:
+    address: ":443"
+    transport:
+      respondingTimeouts:
+        readTimeout: "30m"
+    http3:
+      advertisedPort: 443
+    http:
+      tls:
+        certResolver: "letsencrypt"
+      encodedCharacters:
+        allowEncodedSlash: true
+        allowEncodedQuestionMark: true
+
+serversTransport:
+  insecureSkipVerify: true
+
+ping:
+  entryPoint: "web"
+EOF
+
+echo "Creating configuration: $traefik_dynamic_config_path"
+cat << EOF > $traefik_dynamic_config_path
+http:
+  middlewares:
+    badger:
+      plugin:
+        badger:
+          disableForwardAuth: true
+    redirect-to-https:
+      redirectScheme:
+        scheme: https
+
+  routers:
+    # HTTP to HTTPS redirect router
+    main-app-router-redirect:
+      rule: "Host(\`$pangolin_domain\`)"
+      service: next-service
+      entryPoints:
+        - web
+      middlewares:
+        - redirect-to-https
+        - badger
+
+    # Next.js router (handles everything except API and WebSocket paths)
+    next-router:
+      rule: "Host(\`$pangolin_domain\`) && !PathPrefix(\`/api/v1\`)"
+      service: next-service
+      entryPoints:
+        - websecure
+      middlewares:
+        - badger
+      tls:
+        certResolver: letsencrypt
+
+    # API router (handles /api/v1 paths)
+    api-router:
+      rule: "Host(\`$pangolin_domain\`) && PathPrefix(\`/api/v1\`)"
+      service: api-service
+      entryPoints:
+        - websecure
+      middlewares:
+        - badger
+      tls:
+        certResolver: letsencrypt
+
+    # WebSocket router
+    ws-router:
+      rule: "Host(\`$pangolin_domain\`)"
+      service: api-service
+      entryPoints:
+        - websecure
+      middlewares:
+        - badger
+      tls:
+        certResolver: letsencrypt
+
+  services:
+    next-service:
+      loadBalancer:
+        servers:
+          - url: "http://pangolin:3002"  # Next.js server
+
+    api-service:
+      loadBalancer:
+        servers:
+          - url: "http://pangolin:3000"  # API/WebSocket server
+
+tcp:
+  serversTransports:
+    pp-transport-v1:
+      proxyProtocol:
+        version: 1
+    pp-transport-v2:
+      proxyProtocol:
+        version: 2
+EOF
+
+echo "Starting and enabling docker"
+systemctl enable docker
+systemctl start docker
+
+cat << EOF > $pangolin_docker_compose_systemd_unit_path
+[Unit]
+Description=Pangolin Service
+
+[Service]
+Type=oneshot
+RemainAfterExit=true
+WorkingDirectory=$pangolin_dir
+ExecStart=docker compose up -d --remove-orphans
+ExecStop=docker compose down
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+echo "Starting pangolin"
+systemctl daemon-reload
+systemctl enable pangolin
+systemctl start pangolin
